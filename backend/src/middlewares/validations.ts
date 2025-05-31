@@ -33,7 +33,8 @@ export const validateOrderBody = celebrate({
                 'string.empty': 'Не указан способ оплаты',
             }),
         email: Joi.string().email().required().messages({
-            'string.empty': 'Не указан email',
+            'string.email': 'Поле "email" должно быть валидным email-адресом',
+            'string.empty': 'Поле "email" должно быть заполнено',
         }),
         phone: Joi.string().required().pattern(phoneRegExp).messages({
             'string.empty': 'Не указан телефон',
