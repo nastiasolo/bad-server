@@ -1,9 +1,16 @@
 import { Request, Express } from 'express'
 import multer, { FileFilterCallback } from 'multer'
 import { join } from 'path'
+import fs from 'fs'
+import crypto from 'crypto'
 
 type DestinationCallback = (error: Error | null, destination: string) => void
 type FileNameCallback = (error: Error | null, filename: string) => void
+
+export const fileSizeLimits = {
+    minFileSize: 2 * 1024,
+    maxFileSize: 10 * 1024 * 1024, // 10 MB
+}
 
 const storage = multer.diskStorage({
     destination: (
@@ -11,15 +18,20 @@ const storage = multer.diskStorage({
         _file: Express.Multer.File,
         cb: DestinationCallback
     ) => {
-        cb(
-            null,
-            join(
-                __dirname,
-                process.env.UPLOAD_PATH_TEMP
-                    ? `../public/${process.env.UPLOAD_PATH_TEMP}`
-                    : '../public'
-            )
+        const destinationPath = join(
+            __dirname,
+            process.env.UPLOAD_PATH_TEMP
+                ? `../public/${process.env.UPLOAD_PATH_TEMP}`
+                : '../public'
         )
+        console.log('Destination Path:', destinationPath)
+
+        if (!fs.existsSync(destinationPath)) {
+            fs.mkdirSync(destinationPath, { recursive: true })
+            console.log(`Directory created: ${destinationPath}`)
+        }
+
+        cb(null, destinationPath)
     },
 
     filename: (
@@ -27,7 +39,8 @@ const storage = multer.diskStorage({
         file: Express.Multer.File,
         cb: FileNameCallback
     ) => {
-        cb(null, file.originalname)
+        const uniqueName = crypto.randomBytes(5).toString('hex')
+        cb(null, `${uniqueName}${file.originalname}`)
     },
 })
 
@@ -44,6 +57,7 @@ const fileFilter = (
     file: Express.Multer.File,
     cb: FileFilterCallback
 ) => {
+    console.log('File type:', file.mimetype)
     if (!types.includes(file.mimetype)) {
         return cb(null, false)
     }
@@ -51,4 +65,10 @@ const fileFilter = (
     return cb(null, true)
 }
 
-export default multer({ storage, fileFilter })
+export default multer({
+    storage,
+    fileFilter,
+    limits: {
+        fileSize: fileSizeLimits.maxFileSize,
+    },
+})

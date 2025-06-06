@@ -1,7 +1,8 @@
 import { NextFunction, Request, Response } from 'express'
+import fs from 'fs/promises'
 import { constants } from 'http2'
 import { Error as MongooseError } from 'mongoose'
-import { join } from 'path'
+import path, { join } from 'path'
 import BadRequestError from '../errors/bad-request-error'
 import ConflictError from '../errors/conflict-error'
 import NotFoundError from '../errors/not-found-error'
@@ -43,12 +44,14 @@ const createProduct = async (
         const { description, category, price, title, image } = req.body
 
         // Переносим картинку из временной папки
-        if (image) {
-            movingFile(
+        try {
+            await movingFile(
                 image.fileName,
                 join(__dirname, `../public/${process.env.UPLOAD_PATH_TEMP}`),
                 join(__dirname, `../public/${process.env.UPLOAD_PATH}`)
             )
+        } catch (err) {
+            throw new Error('Ошибка при сохранении файла')
         }
 
         const product = await Product.create({
@@ -60,6 +63,22 @@ const createProduct = async (
         })
         return res.status(constants.HTTP_STATUS_CREATED).send(product)
     } catch (error) {
+        if (req.body.image?.fileName) {
+            const tempFilePath = path.join(
+                __dirname,
+                `../public/${process.env.UPLOAD_PATH_TEMP}`,
+                req.body.image.fileName
+            )
+            console.warn(
+                `🗑 Удаляем файл ${tempFilePath}, так как товар не создан`
+            )
+            await fs
+                .unlink(tempFilePath)
+                .catch((err) =>
+                    console.error(`Ошибка удаления файла: ${err.message}`)
+                )
+        }
+
         if (error instanceof MongooseError.ValidationError) {
             return next(new BadRequestError(error.message))
         }
@@ -85,11 +104,18 @@ const updateProduct = async (
 
         // Переносим картинку из временной папки
         if (image) {
-            movingFile(
-                image.fileName,
-                join(__dirname, `../public/${process.env.UPLOAD_PATH_TEMP}`),
-                join(__dirname, `../public/${process.env.UPLOAD_PATH}`)
-            )
+            try {
+                await movingFile(
+                    image.fileName,
+                    join(
+                        __dirname,
+                        `../public/${process.env.UPLOAD_PATH_TEMP}`
+                    ),
+                    join(__dirname, `../public/${process.env.UPLOAD_PATH}`)
+                )
+            } catch (err) {
+                throw new Error('Ошибка при сохранении файла')
+            }
         }
 
         const product = await Product.findByIdAndUpdate(
