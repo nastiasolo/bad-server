@@ -19,13 +19,13 @@ app.use(cookieParser())
 
 app.use(limiter)
 
-app.use(
-    cors({
-        origin: ['http://localhost', 'http://localhost:5173'],
-        credentials: true,
-    })
-)
-// app.use(cors({ origin: ORIGIN_ALLOW, credentials: true }));
+// app.use(
+//     cors({
+//         origin: ['http://localhost', 'http://localhost:5173'],
+//         credentials: true,
+//     })
+// )
+app.use(cors({ origin: process.env.ORIGIN_ALLOW, credentials: true }))
 // app.use(express.static(path.join(__dirname, 'public')));
 
 app.use(serveStatic(path.join(__dirname, 'public')))
