@@ -14,6 +14,7 @@ export enum Role {
 }
 
 export interface IUser extends Document {
+    _id: Types.ObjectId
     name: string
     email: string
     password: string
@@ -80,6 +81,10 @@ const userSchema = new mongoose.Schema<IUser, IUserModel, IUserMethods>(
         },
         phone: {
             type: String,
+            validate: {
+                validator: (v: string) => validator.isMobilePhone(v),
+                message: 'Поле "номер" должно быть валидным номером телефона',
+            },
         },
         lastOrderDate: {
             type: Date,
@@ -108,8 +113,8 @@ const userSchema = new mongoose.Schema<IUser, IUserModel, IUserMethods>(
             transform: (_doc, ret) => {
                 delete ret.tokens
                 delete ret.password
-                delete ret._id
                 delete ret.roles
+                delete ret._id
                 return ret
             },
         },
@@ -130,57 +135,44 @@ userSchema.pre('save', async function hashingPassword(next) {
 
 // Можно лучше: централизованное создание accessToken и  refresh токена
 
-userSchema.methods.generateAccessToken = function generateAccessToken() {
-    const user = this
-    // Создание accessToken токена возможно в контроллере авторизации
-    return jwt.sign(
-        {
-            _id: user._id.toString(),
-            email: user.email,
-        },
+export const generateAccessToken = (user: IUser) =>
+    jwt.sign(
+        { _id: user._id.toString(), email: user.email },
         ACCESS_TOKEN.secret,
         {
             expiresIn: ACCESS_TOKEN.expiry,
-            subject: user.id.toString(),
+            subject: user._id.toString(),
         }
     )
+
+export const generateRefreshToken = async (user: IUser) => {
+    const refreshToken = jwt.sign(
+        { _id: user._id.toString() },
+        REFRESH_TOKEN.secret,
+        { expiresIn: REFRESH_TOKEN.expiry, subject: user._id.toString() }
+    )
+
+    // Можно лучше: Создаем хеш refresh токена
+    const rTknHash = crypto
+        .createHmac('sha256', REFRESH_TOKEN.secret)
+        .update(refreshToken)
+        .digest('hex')
+
+    // Сохраняем refresh токена в базу данных, можно делать в контроллере авторизации/регистрации
+    user.tokens.push({ token: rTknHash })
+    await user.save()
+
+    return refreshToken
 }
-
-userSchema.methods.generateRefreshToken =
-    async function generateRefreshToken() {
-        const user = this
-        // Создание refresh токена возможно в контроллере авторизации/регистрации
-        const refreshToken = jwt.sign(
-            {
-                _id: user._id.toString(),
-            },
-            REFRESH_TOKEN.secret,
-            {
-                expiresIn: REFRESH_TOKEN.expiry,
-                subject: user.id.toString(),
-            }
-        )
-
-        // Можно лучше: Создаем хеш refresh токена
-        const rTknHash = crypto
-            .createHmac('sha256', REFRESH_TOKEN.secret)
-            .update(refreshToken)
-            .digest('hex')
-
-        // Сохраняем refresh токена в базу данных, можно делать в контроллере авторизации/регистрации
-        user.tokens.push({ token: rTknHash })
-        await user.save()
-
-        return refreshToken
-    }
 
 userSchema.statics.findUserByCredentials = async function findByCredentials(
     email: string,
     password: string
 ) {
-    const user = await this.findOne({ email })
-        .select('+password')
-        .orFail(() => new UnauthorizedError('Неправильные почта или пароль'))
+    const user = await this.findOne({ email }).select('+password')
+    if (!user) {
+        throw new UnauthorizedError('Неправильные почта или пароль')
+    }
     const passwdMatch = md5(password) === user.password
     if (!passwdMatch) {
         return Promise.reject(

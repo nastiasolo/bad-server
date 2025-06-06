@@ -8,15 +8,15 @@ import BadRequestError from '../errors/bad-request-error'
 import ConflictError from '../errors/conflict-error'
 import NotFoundError from '../errors/not-found-error'
 import UnauthorizedError from '../errors/unauthorized-error'
-import User from '../models/user'
+import User, { generateAccessToken, generateRefreshToken } from '../models/user'
 
 // POST /auth/login
 const login = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { email, password } = req.body
         const user = await User.findUserByCredentials(email, password)
-        const accessToken = user.generateAccessToken()
-        const refreshToken = await user.generateRefreshToken()
+        const accessToken = generateAccessToken(user)
+        const refreshToken = await generateRefreshToken(user)
         res.cookie(
             REFRESH_TOKEN.cookie.name,
             refreshToken,
@@ -38,8 +38,8 @@ const register = async (req: Request, res: Response, next: NextFunction) => {
         const { email, password, name } = req.body
         const newUser = new User({ email, password, name })
         await newUser.save()
-        const accessToken = newUser.generateAccessToken()
-        const refreshToken = await newUser.generateRefreshToken()
+        const accessToken = generateAccessToken(newUser)
+        const refreshToken = await generateRefreshToken(newUser)
 
         res.cookie(
             REFRESH_TOKEN.cookie.name,
@@ -72,6 +72,7 @@ const getCurrentUser = async (
 ) => {
     try {
         const userId = res.locals.user._id
+        console.log('res.locals.user:', res.locals.user)
         const user = await User.findById(userId).orFail(
             () =>
                 new NotFoundError(
@@ -85,32 +86,42 @@ const getCurrentUser = async (
 }
 
 // Можно лучше: вынести общую логику получения данных из refresh токена
-const deleteRefreshTokenInUser = async (
-    req: Request,
-    _res: Response,
-    _next: NextFunction
-) => {
+const deleteRefreshTokenInUser = async (req: Request) => {
     const { cookies } = req
-    const rfTkn = cookies[REFRESH_TOKEN.cookie.name]
+    const refreshToken = cookies[REFRESH_TOKEN.cookie.name]
 
-    if (!rfTkn) {
+    if (!refreshToken) {
         throw new UnauthorizedError('Не валидный токен')
     }
 
-    const decodedRefreshTkn = jwt.verify(
-        rfTkn,
-        REFRESH_TOKEN.secret
-    ) as JwtPayload
-    const user = await User.findOne({
-        _id: decodedRefreshTkn._id,
-    }).orFail(() => new UnauthorizedError('Пользователь не найден в базе'))
+    let decodedRefreshTkn: JwtPayload
+    try {
+        decodedRefreshTkn = jwt.verify(
+            refreshToken,
+            REFRESH_TOKEN.secret
+        ) as JwtPayload
+    } catch (error) {
+        throw new UnauthorizedError('Невалидный refresh-токен')
+    }
 
-    const rTknHash = crypto
+    const user = await User.findById(decodedRefreshTkn._id).orFail(
+        () => new UnauthorizedError('Пользователь не найден')
+    )
+
+    const refreshTokenHash = crypto
         .createHmac('sha256', REFRESH_TOKEN.secret)
-        .update(rfTkn)
+        .update(refreshToken)
         .digest('hex')
 
-    user.tokens = user.tokens.filter((tokenObj) => tokenObj.token !== rTknHash)
+    const tokenIndex = user.tokens.findIndex(
+        (tokenObj) => tokenObj.token === refreshTokenHash
+    )
+
+    if (tokenIndex === -1) {
+        throw new UnauthorizedError('Невалидный refresh-токен')
+    }
+
+    user.tokens.splice(tokenIndex, 1)
 
     await user.save()
 
@@ -121,12 +132,11 @@ const deleteRefreshTokenInUser = async (
 // GET  /auth/logout
 const logout = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        await deleteRefreshTokenInUser(req, res, next)
-        const expireCookieOptions = {
+        await deleteRefreshTokenInUser(req)
+        res.clearCookie(REFRESH_TOKEN.cookie.name, {
             ...REFRESH_TOKEN.cookie.options,
-            maxAge: -1,
-        }
-        res.cookie(REFRESH_TOKEN.cookie.name, '', expireCookieOptions)
+            expires: new Date(0),
+        })
         res.status(200).json({
             success: true,
         })
@@ -142,13 +152,9 @@ const refreshAccessToken = async (
     next: NextFunction
 ) => {
     try {
-        const userWithRefreshTkn = await deleteRefreshTokenInUser(
-            req,
-            res,
-            next
-        )
-        const accessToken = await userWithRefreshTkn.generateAccessToken()
-        const refreshToken = await userWithRefreshTkn.generateRefreshToken()
+        const userWithRefreshTkn = await deleteRefreshTokenInUser(req)
+        const accessToken = generateAccessToken(userWithRefreshTkn)
+        const refreshToken = await generateRefreshToken(userWithRefreshTkn)
         res.cookie(
             REFRESH_TOKEN.cookie.name,
             refreshToken,
@@ -160,7 +166,7 @@ const refreshAccessToken = async (
             accessToken,
         })
     } catch (error) {
-        return next(error)
+        next(error)
     }
 }
 
@@ -190,8 +196,8 @@ const updateCurrentUser = async (
     res: Response,
     next: NextFunction
 ) => {
-    const userId = res.locals.user._id
     try {
+        const userId = res.locals.user._id
         const updatedUser = await User.findByIdAndUpdate(userId, req.body, {
             new: true,
         }).orFail(
