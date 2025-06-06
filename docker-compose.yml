@@ -21,7 +21,6 @@ services:
       - internal
 
   backend:
-    restart: always
     build:
       context: backend
     env_file:
@@ -35,6 +34,7 @@ services:
       - internal
     depends_on:
       - mongo
+    restart: unless-stopped
 
   server:
     build:
@@ -49,6 +49,7 @@ services:
       - backend
     networks:
       - internal
+    restart: unless-stopped
 
 volumes:
   frontend:
