@@ -15,9 +15,9 @@ import ExpressMongoSanitize from 'express-mongo-sanitize'
 const { PORT = 3000 } = process.env
 const app = express()
 
-app.use(cookieParser())
-
 app.use(limiter)
+
+app.use(cookieParser())
 
 // app.use(
 //     cors({
