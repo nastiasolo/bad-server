@@ -5,6 +5,8 @@ import NotFoundError from '../errors/not-found-error'
 import Order, { IOrder } from '../models/order'
 import Product, { IProduct } from '../models/product'
 import User from '../models/user'
+import sanitizeHtml from 'sanitize-html'
+import escapeRegExp from '../utils/escapeRegExp'
 
 // eslint-disable-next-line max-len
 // GET /orders?page=2&limit=5&sort=totalAmount&order=desc&orderDateFrom=2024-07-01&orderDateTo=2024-08-01&status=delivering&totalAmountFrom=100&totalAmountTo=1000&search=%2B1
@@ -27,6 +29,10 @@ export const getOrders = async (
             orderDateTo,
             search,
         } = req.query
+
+        const limit = Math.min(Math.max(Number(req.query.limit), 1), 10)
+        const pageSize = Math.min(Number(limit) || 10, 10)
+        const currentPage = Math.max(Number(page) || 1, 1)
 
         const filters: FilterQuery<Partial<IOrder>> = {}
 
@@ -85,12 +91,22 @@ export const getOrders = async (
                     as: 'customer',
                 },
             },
-            { $unwind: '$customer' },
-            { $unwind: '$products' },
+            {
+                $unwind: {
+                    path: '$customer',
+                    preserveNullAndEmptyArrays: true,
+                },
+            },
+            {
+                $unwind: {
+                    path: '$products',
+                    preserveNullAndEmptyArrays: true,
+                },
+            },
         ]
 
         if (search) {
-            const searchRegex = new RegExp(search as string, 'i')
+            const searchRegex = new RegExp(escapeRegExp(search as string), 'i')
             const searchNumber = Number(search)
 
             const searchConditions: any[] = [{ 'products.title': searchRegex }]
@@ -116,8 +132,8 @@ export const getOrders = async (
 
         aggregatePipeline.push(
             { $sort: sort },
-            { $skip: (Number(page) - 1) * Number(limit) },
-            { $limit: Number(limit) },
+            { $skip: (currentPage - 1) * pageSize },
+            { $limit: limit },
             {
                 $group: {
                     _id: '$_id',
@@ -133,15 +149,15 @@ export const getOrders = async (
 
         const orders = await Order.aggregate(aggregatePipeline)
         const totalOrders = await Order.countDocuments(filters)
-        const totalPages = Math.ceil(totalOrders / Number(limit))
+        const totalPages = Math.ceil(totalOrders / pageSize)
 
         res.status(200).json({
             orders,
             pagination: {
                 totalOrders,
                 totalPages,
-                currentPage: Number(page),
-                pageSize: Number(limit),
+                currentPage,
+                pageSize,
             },
         })
     } catch (error) {
@@ -309,13 +325,18 @@ export const createOrder = async (
             return next(new BadRequestError('Неверная сумма заказа'))
         }
 
+        const cleanComment = sanitizeHtml(comment, {
+            allowedTags: [],
+            allowedAttributes: {},
+        })
+
         const newOrder = new Order({
             totalAmount: total,
             products: items,
             payment,
             phone,
             email,
-            comment,
+            cleanComment,
             customer: userId,
             deliveryAddress: address,
         })

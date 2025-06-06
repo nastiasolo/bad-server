@@ -20,8 +20,9 @@ app.use(cors())
 // app.use(express.static(path.join(__dirname, 'public')));
 
 app.use(serveStatic(path.join(__dirname, 'public')))
+app.use(json({ limit: '10mb' }))
+app.use(urlencoded({ extended: true, limit: '10mb' }))
 
-app.use(urlencoded({ extended: true }))
 app.use(json())
 
 app.options('*', cors())
