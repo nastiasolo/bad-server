@@ -12,7 +12,7 @@ import routes from './routes'
 
 const { PORT = 3000 } = process.env
 const app = express()
-//back to 8e090a9
+
 app.use(cookieParser())
 
 app.use(cors())
