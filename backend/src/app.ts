@@ -14,8 +14,6 @@ import routes from './routes'
 const { PORT = 3000 } = process.env
 const app = express()
 
-app.use(limiter)
-
 app.use(cookieParser())
 
 app.use(cors())
@@ -29,6 +27,7 @@ app.use(urlencoded({ extended: true, limit: '10mb' }))
 app.use(json())
 
 app.options('*', cors())
+app.use(limiter)
 app.use(routes)
 app.use(errors())
 app.use(errorHandler)
