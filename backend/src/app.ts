@@ -3,7 +3,7 @@ import cookieParser from 'cookie-parser'
 import cors from 'cors'
 import 'dotenv/config'
 import express, { json, urlencoded } from 'express'
-import limiter from './middlewares/rate-limit'
+import { generalLimiter } from './middlewares/rate-limit'
 import mongoose from 'mongoose'
 import path from 'path'
 import { DB_ADDRESS } from './config'
@@ -33,7 +33,7 @@ app.options(
         credentials: true,
     })
 )
-app.use(limiter)
+app.use(generalLimiter)
 app.use(routes)
 app.use(errors())
 app.use(errorHandler)
