@@ -3,7 +3,7 @@ import cookieParser from 'cookie-parser'
 import cors from 'cors'
 import 'dotenv/config'
 import express, { json, urlencoded } from 'express'
-import { generalLimiter } from './middlewares/rate-limit'
+import limiter from './middlewares/rate-limit'
 import mongoose from 'mongoose'
 import path from 'path'
 import { DB_ADDRESS } from './config'
@@ -15,6 +15,7 @@ const { PORT = 3000 } = process.env
 const app = express()
 
 app.use(cookieParser())
+app.use(limiter)
 
 // app.use(cors())
 app.use(cors({ origin: process.env.ORIGIN_ALLOW, credentials: true }))
@@ -33,7 +34,6 @@ app.options(
         credentials: true,
     })
 )
-app.use(generalLimiter)
 app.use(routes)
 app.use(errors())
 app.use(errorHandler)
