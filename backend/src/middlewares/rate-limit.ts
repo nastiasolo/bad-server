@@ -5,12 +5,12 @@ const limiter = rateLimit({
     max: 50,
     statusCode: 429,
     message: 'Слишком много запросов, попробуйте позже',
-    skip: (req) => {
-        // Пропускать лимитер в тестах или на конкретных маршрутах
-        return (
-            process.env.NODE_ENV === 'test' || req.path.startsWith('/customers')
-        )
-    },
+    // skip: (req) => {
+    //     // Пропускать лимитер в тестах или на конкретных маршрутах
+    //     return (
+    //         process.env.NODE_ENV === 'test' || req.path.startsWith('/customers')
+    //     )
+    // },
 })
 
 export default limiter
