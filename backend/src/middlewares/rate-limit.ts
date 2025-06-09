@@ -2,7 +2,8 @@ import { rateLimit } from 'express-rate-limit'
 
 const limiter = rateLimit({
     windowMs: 1 * 60 * 1000,
-    max: 100,
+    max: 50,
+    statusCode: 429,
     message: 'Слишком много запросов, попробуйте позже',
     skip: (req) => {
         // Пропускать лимитер в тестах или на конкретных маршрутах
