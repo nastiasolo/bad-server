@@ -94,6 +94,7 @@ export const getCustomers = async (
 
         if (search) {
             const escapedSearch = escapeRegExp(search as string)
+            console.log('Escaped:', escapedSearch)
             const searchRegex = new RegExp(escapedSearch, 'i')
             const orders = await Order.find(
                 {
